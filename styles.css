@@ -1,0 +1,97 @@
+html,
+      body,
+      #map {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+      }
+      /* Caixa com o timestamp exibido na parte superior centralizada */
+      #timestamp-info {
+        position: absolute;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 1000;
+        background: rgba(255, 255, 255, 0.9);
+        padding: 5px 10px;
+        border-radius: 4px;
+        font-family: sans-serif;
+      }
+      /* Caixa de controles (player) posicionada na parte inferior centralizada */
+      #controls {
+        position: absolute;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 1000;
+        background: rgba(255, 255, 255, 0.9);
+        padding: 10px;
+        width: 300px;
+        border-radius: 5px;
+        box-shadow: 0 0 6px rgba(0, 0, 0, 0.3);
+        font-family: sans-serif;
+        text-align: center;
+      }
+      /* Caixa para os controles de exibição dos campos, trajectory e threshold, posicionada à direita centralizada verticalmente */
+      #info-panel {
+        position: absolute;
+        right: 20px;
+        top: 50%;
+        transform: translateY(-50%);
+        z-index: 1000;
+        background: rgba(255,255,255,0.9);
+        padding: 10px;
+        border-radius: 5px;
+        box-shadow: 0 0 6px rgba(0,0,0,0.3);
+        font-family: sans-serif;
+        max-width: 220px;
+      }
+      #info-panel h3 {
+        margin-top: 0;
+        font-size: 1em;
+        text-align: center;
+      }
+      /* Controles dinâmicos criados para cada campo */
+      .field-option {
+        margin-bottom: 8px;
+      }
+      .field-option label {
+        font-size: 0.9em;
+      }
+      /* Controle do slider para navegação entre os slides */
+      #slider-container {
+        margin: 10px 0;
+      }
+      #timeline {
+        width: 100%;
+      }
+      /* Estilo dos botões do player */
+      #player-controls {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      #player-controls button {
+        flex: 1;
+        margin: 0 4px;
+      }
+      /* Controle de velocidade */
+      #speed-label {
+        font-size: 0.9em;
+        margin-top: 5px;
+      }
+      /* Estilo do tooltip dos centroides */
+      .centroid-tooltip {
+        background-color: #fff;
+        border: 1px solid #ccc;
+        padding: 4px;
+        font-size: 0.85em;
+      }
+      /* Estilo para a seção de filtro de threshold */
+      .filter-option {
+        margin-top: 12px;
+      }
+      .filter-option label {
+        font-size: 0.9em;
+        margin-right: 10px;
+      }

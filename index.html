@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Visualizador GeoJSON - Player Automático</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  </head>
+  <body>
+    <div id="map"></div>
+    <div id="timestamp-info">Track :</div>
+    <div id="info-panel">
+      <h3>View Options:</h3>
+      <!-- Controles para as chaves dos centroides -->
+      <div id="dynamic-options"></div>
+      <!-- Controle para trajectory -->
+      <div id="trajectory-option" class="filter-option">
+        <label>
+          <input type="checkbox" id="showTrajectory" />
+          trajectory
+        </label>
+      </div>
+      <!-- Controle para filtrar por threshold -->
+      <div id="threshold-filter" class="filter-option">
+        <!-- Centralize Threshold text -->
+        <span>Threshold:</span><br>
+        <label>
+          <input type="radio" name="thresholdFilter" value="235" checked />
+          235
+        </label>
+        <label>
+          <input type="radio" name="thresholdFilter" value="200" />
+          200
+        </label>
+      </div>
+    </div>
+    <div id="controls">
+      <div id="slider-container">
+        <input type="range" id="timeline" min="0" value="0" step="1" disabled />
+      </div>
+      <div id="player-controls">
+        <button id="prevLayer">&laquo;</button>
+        <button id="playPause">Play</button>
+        <button id="nextLayer">&raquo;</button>
+      </div>
+      <div id="speed-label">
+        Velocidade:
+        <input type="range" id="speed" min="0.5" max="5" step="0.1" value="2" />
+        <span id="speedValue">2</span>s
+      </div>
+    </div>
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="script.js"></script>
+  </body>
+</html>
