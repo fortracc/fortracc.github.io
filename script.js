@@ -1,4 +1,4 @@
-const CONFIG_DISPLAY_KEYS = ['uid', 'status', 'size', 'max', 'ang_'];
+const CONFIG_DISPLAY_KEYS = ['uid', 'status', 'size', 'min', 'ang_'];
 const REPO_RAW_URL = "https://raw.githubusercontent.com/fortracc/fortracc.github.io/main/";
 const LOCAL_BOUNDARY_DIR = "track/boundary/", LOCAL_TRAJECTORY_DIR = "track/trajectory/";
 const GITHUB_BOUNDARY_API = "https://api.github.com/repos/fortracc/fortracc.github.io/contents/track/boundary?ref=main";
@@ -61,7 +61,7 @@ document.addEventListener("DOMContentLoaded", () => {
       checkbox.checked = false;
       checkbox.addEventListener("change", updateDisplayOptions);
       label.appendChild(checkbox);
-      label.appendChild(document.createTextNode(" - " + field));
+      label.appendChild(document.createTextNode("->" + field));
       container.appendChild(label);
       dynamicOptionsContainer.appendChild(container);
     });
