@@ -1,11 +1,12 @@
 // CONFIG_DISPLAY_KEYS: Altere este array para definir quais chaves devem ser disponibilizadas para exibição.
 const CONFIG_DISPLAY_KEYS = ['uid', 'threshold', 'size', 'max', 'ang_'];
 
-// URL base para construir o caminho dos arquivos de trajectory (usar o repositório raw do GitHub)
+// URL base para o raw dos arquivos (usado caso precise buscar diretamente)
 const REPO_RAW_URL = "https://raw.githubusercontent.com/fortracc/fortracc.github.io/main/";
 
 // Variáveis globais
 let geojsonLayers = [];
+let trajectoryFiles = {}; // Mapeia nome do arquivo -> download_url para arquivos de trajectory.
 let currentIndex = 0;
 let playing = false;
 let playInterval = null;
@@ -190,10 +191,40 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  // Função para buscar dinamicamente os arquivos de trajectory usando a API do GitHub.
+  function fetchTrajectoryFileList() {
+    const apiUrl = "https://api.github.com/repos/fortracc/fortracc.github.io/contents/track/trajectory?ref=main";
+    return fetch(apiUrl)
+      .then(response => {
+        if (!response.ok) {
+          throw new Error("Erro ao acessar os arquivos de trajectory: " + response.status);
+        }
+        return response.json();
+      })
+      .then(files => {
+        // Cria um objeto mapeando o nome do arquivo para seu download_url.
+        const mapFiles = {};
+        files.forEach(file => {
+          if (file.name.match(/\.geojson$/i)) {
+            mapFiles[file.name] = file.download_url;
+          }
+        });
+        return mapFiles;
+      });
+  }
+
   // Carrega ou recria a layer de trajectory para a camada atual aplicando o filtro.
+  // Agora, utiliza os arquivos listados dinamicamente.
   function loadTrajectoryForCurrentLayer() {
     const currentLayer = geojsonLayers[currentIndex];
     if (!currentLayer) return;
+    // Verifica se o arquivo de trajectory existe para o nome do arquivo corrente.
+    const trajectoryUrl = trajectoryFiles[currentLayer.fileName];
+    if (!trajectoryUrl) {
+      console.warn("Arquivo de trajectory não encontrado para: " + currentLayer.fileName);
+      return;
+    }
+    // Se já foi carregado, recria a layer.
     if (currentLayer.trajectoryGeojson) {
       if (currentTrajectoryLayer) {
         map.removeLayer(currentTrajectoryLayer);
@@ -203,12 +234,11 @@ document.addEventListener("DOMContentLoaded", () => {
       currentLayer.trajectoryLayer = currentTrajectoryLayer;
       return;
     }
-    // Para trajectory, supõe-se que os arquivos têm o mesmo nome e estão em "track/trajectory/"
-    let filePath = REPO_RAW_URL + "track/trajectory/" + currentLayer.fileName;
-    fetch(filePath)
+    // Carrega o arquivo de trajectory a partir do download_url.
+    fetch(trajectoryUrl)
       .then(response => {
         if (!response.ok) {
-          throw new Error("Erro ao carregar trajectory: " + filePath);
+          throw new Error("Erro ao carregar trajectory: " + trajectoryUrl);
         }
         return response.json();
       })
@@ -272,24 +302,24 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // Função para buscar dinamicamente os arquivos GeoJSON na pasta "track/boundary" via API do GitHub.
-  function fetchGeojsonFileList() {
+  function fetchBoundaryFileList() {
     const apiUrl = "https://api.github.com/repos/fortracc/fortracc.github.io/contents/track/boundary?ref=main";
     return fetch(apiUrl)
       .then(response => {
         if (!response.ok) {
-          throw new Error("Erro ao acessar o repositório: " + response.status);
+          throw new Error("Erro ao acessar o repositório (boundary): " + response.status);
         }
         return response.json();
       })
       .then(files => {
-        // Filtra para arquivos com extensão .geojson
+        // Filtra para arquivos com extensão .geojson.
         return files.filter(file => file.name.match(/\.geojson$/i));
       });
   }
 
   // Carrega os arquivos GeoJSON listados em "track/boundary" usando a API do GitHub.
-  function loadGeojsonLayers() {
-    fetchGeojsonFileList()
+  function loadBoundaryLayers() {
+    fetchBoundaryFileList()
       .then(files => {
         if (!files.length) {
           throw new Error("Nenhum arquivo .geojson encontrado em track/boundary");
@@ -336,6 +366,17 @@ document.addEventListener("DOMContentLoaded", () => {
       });
   }
 
+  // Carrega a listagem dos arquivos de trajectory e armazena globalmente.
+  function loadTrajectoryFiles() {
+    fetchTrajectoryFileList()
+      .then(filesMap => {
+        trajectoryFiles = filesMap;
+      })
+      .catch(err => {
+        console.error("Erro ao carregar arquivos de trajectory:", err);
+      });
+  }
+
   // Eventos dos elementos da interface.
   timelineSlider.addEventListener("input", e => {
     const index = parseInt(e.target.value);
@@ -379,7 +420,8 @@ document.addEventListener("DOMContentLoaded", () => {
     radio.addEventListener("change", updateThresholdFilter);
   });
 
-  // Gera os controles de exibição e inicia o carregamento dos dados.
+  // Inicia os controles e carrega os dados:
   generateFieldOptions();
-  loadGeojsonLayers();
+  loadTrajectoryFiles();
+  loadBoundaryLayers();
 });
