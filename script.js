@@ -1,5 +1,22 @@
 // CONFIG_DISPLAY_KEYS: Altere este array para definir quais chaves devem ser disponibilizadas para exibição.
-const CONFIG_DISPLAY_KEYS = ['uid', 'status', 'threshold', 'size', 'max', 'ang_'];
+const CONFIG_DISPLAY_KEYS = ['uid', 'threshold', 'size', 'max', 'ang_'];
+
+// URL base para construir o caminho dos arquivos de trajectory (usar o repositório raw do GitHub)
+const REPO_RAW_URL = "https://raw.githubusercontent.com/fortracc/fortracc.github.io/main/";
+
+// Variáveis globais
+let geojsonLayers = [];
+let currentIndex = 0;
+let playing = false;
+let playInterval = null;
+let currentBoundaryLayer = null; // camada boundary filtrada
+let currentTrajectoryLayer = null; // camada trajectory filtrada
+let currentThresholdFilter = "235.0";
+let displayOptions = {};
+
+CONFIG_DISPLAY_KEYS.forEach(field => {
+  displayOptions[field] = false;
+});
 
 document.addEventListener("DOMContentLoaded", () => {
   // Define os limites da região de centralização.
@@ -8,49 +25,29 @@ document.addEventListener("DOMContentLoaded", () => {
     [4.986926398683252, -30.000680181819533]   // [lat_max, lon_max]
   ];
 
-  // Inicializa o mapa com os bounds definidos.
+  // Inicializa o mapa.
   const map = L.map("map");
   map.fitBounds(bounds);
-
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     attribution: "© OpenStreetMap contributors",
   }).addTo(map);
 
-  // Variáveis para gerenciamento das layers e player.
-  // Cada item em geojsonLayers terá: { fileName, geojson (original), trajectoryLayer (opcional), trajectoryGeojson (opcional) }
-  let geojsonLayers = [];
-  let currentIndex = 0;
-  let playing = false;
-  let playInterval = null;
-  // Variáveis para as layers renderizadas (após filtro).
-  let currentBoundaryLayer = null; // camada boundary filtrada
-  let currentTrajectoryLayer = null; // camada trajectory filtrada
-
-  // Filtro de threshold: valor default é "235.0".
-  let currentThresholdFilter = "235.0";
-
-  // Objeto para armazenar as opções de exibição dos campos (para os markers dos centroides).
-  let displayOptions = {};
-  CONFIG_DISPLAY_KEYS.forEach(field => {
-    displayOptions[field] = false;
-  });
-
-  // Referências da interface.
+  // Referências de elementos na interface
   const timelineSlider = document.getElementById("timeline");
   const prevBtn = document.getElementById("prevLayer");
   const playPauseBtn = document.getElementById("playPause");
   const nextBtn = document.getElementById("nextLayer");
   const speedInput = document.getElementById("speed");
   const speedValueSpan = document.getElementById("speedValue");
-  const timestampInfo = document.getElementById("timestamp-info");
+  const trackInfo = document.getElementById("track-info") || document.getElementById("timestamp-info");
   const dynamicOptionsContainer = document.getElementById("dynamic-options");
   const showTrajectoryCheckbox = document.getElementById("showTrajectory");
   const thresholdRadios = document.getElementsByName("thresholdFilter");
 
   // LayerGroup para os markers dos centroides.
-  let markerGroup = L.layerGroup().addTo(map);
+  const markerGroup = L.layerGroup().addTo(map);
 
-  // Retorna true se a feature tiver a propriedade threshold igual ao filtro atual.
+  // Função auxiliar que retorna true se a feature tem a propriedade threshold igual ao filtro atual.
   function passesThreshold(feature) {
     if (feature.properties && feature.properties.threshold !== undefined) {
       return parseFloat(feature.properties.threshold) === parseFloat(currentThresholdFilter);
@@ -58,7 +55,7 @@ document.addEventListener("DOMContentLoaded", () => {
     return false;
   }
 
-  // Cria uma layer de trajectory a partir de um geojson filtrado.
+  // Cria a layer de trajectory aplicando o filtro de threshold.
   function createTrajectoryLayer(geojson) {
     return L.geoJSON(geojson, {
       filter: passesThreshold,
@@ -70,7 +67,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // Gera os controles (checkboxes) para os campos definidos em CONFIG_DISPLAY_KEYS.
+  // Gera os checkboxes dos campos definidos no CONFIG_DISPLAY_KEYS.
   function generateFieldOptions() {
     dynamicOptionsContainer.innerHTML = "";
     CONFIG_DISPLAY_KEYS.forEach(field => {
@@ -83,14 +80,14 @@ document.addEventListener("DOMContentLoaded", () => {
       checkbox.checked = false;
       checkbox.addEventListener("change", updateDisplayOptions);
       label.appendChild(checkbox);
-      label.appendChild(document.createTextNode(" " + field));
+      label.appendChild(document.createTextNode(" Exibir " + field));
       container.appendChild(label);
       dynamicOptionsContainer.appendChild(container);
     });
     updateMarkers();
   }
 
-  // Atualiza displayOptions conforme os checkboxes e recria os markers.
+  // Atualiza as opções de exibição e recria os markers.
   function updateDisplayOptions() {
     CONFIG_DISPLAY_KEYS.forEach(field => {
       const checkbox = document.querySelector(`input[name="${field}"]`);
@@ -101,7 +98,7 @@ document.addEventListener("DOMContentLoaded", () => {
     updateMarkers();
   }
 
-  // Calcula o centroid (média dos vértices do primeiro anel do polígono).
+  // Calcula o centroid para um polígono (primeiro anel).
   function computeCentroid(feature) {
     if (!feature.geometry || !feature.geometry.coordinates || feature.geometry.type !== "Polygon") return null;
     const coords = feature.geometry.coordinates[0];
@@ -113,8 +110,7 @@ document.addEventListener("DOMContentLoaded", () => {
     return [sumY / coords.length, sumX / coords.length]; // [lat, lon]
   }
 
-  // Atualiza a caixa de timestamp com base na primeira feature filtrada.
-  // Agora adiciona o acréscimo "(UTC)" após o timestamp.
+  // Atualiza a exibição do track com timestamp e o acréscimo "(UTC)".
   function updateTimestampInfo(obj) {
     let ts = "";
     if (obj.geojson.features && obj.geojson.features.length > 0) {
@@ -122,10 +118,12 @@ document.addEventListener("DOMContentLoaded", () => {
            (obj.geojson.features[0].properties && obj.geojson.features[0].properties.timestamp) ||
            "";
     }
-    timestampInfo.textContent = "Track: " + ts + " (UTC)";
+    if (trackInfo) {
+      trackInfo.textContent = "Track: " + ts + " (UTC)";
+    }
   }
 
-  // Remove as layers atuais (boundary, markers e trajectory).
+  // Remove camadas atuais de boundary, markers e trajectory.
   function removeCurrentLayer() {
     if (currentBoundaryLayer) {
       map.removeLayer(currentBoundaryLayer);
@@ -135,7 +133,7 @@ document.addEventListener("DOMContentLoaded", () => {
     removeTrajectoryLayer();
   }
 
-  // Remove a layer de trajectory, se exibida.
+  // Remove a layer de trajectory se existente.
   function removeTrajectoryLayer() {
     if (currentTrajectoryLayer) {
       map.removeLayer(currentTrajectoryLayer);
@@ -146,7 +144,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // Atualiza a camada boundary filtrando as features por threshold.
+  // Atualiza a camada boundary filtrando por threshold.
   function updateBoundaryLayer() {
     if (currentBoundaryLayer) {
       map.removeLayer(currentBoundaryLayer);
@@ -168,7 +166,6 @@ document.addEventListener("DOMContentLoaded", () => {
   function updateMarkers() {
     markerGroup.clearLayers();
     if (!geojsonLayers[currentIndex]) return;
-    // Filtra as features com threshold igual ao filtro atual.
     const features = geojsonLayers[currentIndex].geojson.features.filter(passesThreshold);
     features.forEach(feature => {
       const centroid = computeCentroid(feature);
@@ -193,12 +190,10 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // Carrega (ou recria) a layer de trajectory para a camada atual aplicando o filtro.
+  // Carrega ou recria a layer de trajectory para a camada atual aplicando o filtro.
   function loadTrajectoryForCurrentLayer() {
     const currentLayer = geojsonLayers[currentIndex];
     if (!currentLayer) return;
-
-    // Se o geojson da trajectory já foi carregado, recria a layer filtrada.
     if (currentLayer.trajectoryGeojson) {
       if (currentTrajectoryLayer) {
         map.removeLayer(currentTrajectoryLayer);
@@ -208,11 +203,8 @@ document.addEventListener("DOMContentLoaded", () => {
       currentLayer.trajectoryLayer = currentTrajectoryLayer;
       return;
     }
-    // Obtém o arquivo de trajectory (supondo mesmo nome, em pasta "track/trajectory/").
-    let filePath = currentLayer.fileName;
-    if (!filePath.includes("track/trajectory/")) {
-      filePath = "track/trajectory/" + filePath;
-    }
+    // Para trajectory, supõe-se que os arquivos têm o mesmo nome e estão em "track/trajectory/"
+    let filePath = REPO_RAW_URL + "track/trajectory/" + currentLayer.fileName;
     fetch(filePath)
       .then(response => {
         if (!response.ok) {
@@ -221,7 +213,6 @@ document.addEventListener("DOMContentLoaded", () => {
         return response.json();
       })
       .then(geojson => {
-        // Armazena o geojson para recriação futura conforme o filtro.
         currentLayer.trajectoryGeojson = geojson;
         currentTrajectoryLayer = createTrajectoryLayer(geojson);
         currentTrajectoryLayer.addTo(map);
@@ -233,7 +224,7 @@ document.addEventListener("DOMContentLoaded", () => {
       });
   }
 
-  // Atualiza a exibição da trajectory, conforme o checkbox.
+  // Atualiza a exibição da trajectory com base no checkbox.
   function updateTrajectoryDisplay() {
     if (showTrajectoryCheckbox.checked) {
       loadTrajectoryForCurrentLayer();
@@ -242,7 +233,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // Atualiza o filtro de threshold conforme seleção do usuário.
+  // Atualiza o filtro de threshold e recria as camadas.
   function updateThresholdFilter() {
     for (const radio of thresholdRadios) {
       if (radio.checked) {
@@ -269,7 +260,7 @@ document.addEventListener("DOMContentLoaded", () => {
     timelineSlider.value = currentIndex;
   }
 
-  // Atualiza o intervalo do play conforme a velocidade selecionada.
+  // Atualiza o intervalo do player conforme a velocidade selecionada.
   function updatePlayInterval() {
     if (playInterval) clearInterval(playInterval);
     const intervalTime = parseFloat(speedInput.value) * 1000;
@@ -280,39 +271,32 @@ document.addEventListener("DOMContentLoaded", () => {
     }, intervalTime);
   }
 
-  // Busca a listagem de arquivos .geojson na pasta "track/boundary/".
+  // Função para buscar dinamicamente os arquivos GeoJSON na pasta "track/boundary" via API do GitHub.
   function fetchGeojsonFileList() {
-    // OBS.: o servidor deve permitir listagem do diretório.
-    return fetch("track/boundary/")
+    const apiUrl = "https://api.github.com/repos/fortracc/fortracc.github.io/contents/track/boundary?ref=main";
+    return fetch(apiUrl)
       .then(response => {
         if (!response.ok) {
-          throw new Error("Não foi possível acessar o diretório track/boundary/");
+          throw new Error("Erro ao acessar o repositório: " + response.status);
         }
-        return response.text();
+        return response.json();
       })
-      .then(html => {
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(html, "text/html");
-        const links = Array.from(doc.querySelectorAll("a"))
-          .map(a => a.getAttribute("href"))
-          .filter(href => href && href.match(/\.geojson$/i));
-        return links;
+      .then(files => {
+        // Filtra para arquivos com extensão .geojson
+        return files.filter(file => file.name.match(/\.geojson$/i));
       });
   }
 
-  // Carrega os arquivos GeoJSON encontrados em "track/boundary/".
+  // Carrega os arquivos GeoJSON listados em "track/boundary" usando a API do GitHub.
   function loadGeojsonLayers() {
     fetchGeojsonFileList()
-      .then(fileNames => {
-        if (!fileNames.length) {
-          throw new Error("Nenhum arquivo .geojson encontrado em track/boundary/");
+      .then(files => {
+        if (!files.length) {
+          throw new Error("Nenhum arquivo .geojson encontrado em track/boundary");
         }
         let loadedCount = 0;
-        fileNames.forEach(fileName => {
-          let filePath = fileName;
-          if (!fileName.includes("track/boundary/")) {
-            filePath = "track/boundary/" + fileName;
-          }
+        files.forEach(file => {
+          const filePath = file.download_url;
           fetch(filePath)
             .then(response => {
               if (!response.ok) {
@@ -321,10 +305,8 @@ document.addEventListener("DOMContentLoaded", () => {
               return response.json();
             })
             .then(geojson => {
-              const parts = fileName.split("/");
-              const name = parts[parts.length - 1];
               geojsonLayers.push({
-                fileName: name,
+                fileName: file.name,
                 geojson: geojson,
                 trajectoryLayer: null,
                 trajectoryGeojson: null
@@ -336,13 +318,12 @@ document.addEventListener("DOMContentLoaded", () => {
             })
             .finally(() => {
               loadedCount++;
-              if (loadedCount === fileNames.length && geojsonLayers.length > 0) {
+              if (loadedCount === files.length && geojsonLayers.length > 0) {
                 timelineSlider.disabled = false;
                 timelineSlider.min = 0;
                 timelineSlider.max = geojsonLayers.length - 1;
                 timelineSlider.value = 0;
                 showLayerAtIndex(0);
-                // Inicia o player automaticamente.
                 playing = true;
                 playPauseBtn.textContent = "Pause";
                 updatePlayInterval();
@@ -355,7 +336,7 @@ document.addEventListener("DOMContentLoaded", () => {
       });
   }
 
-  // Eventos de interface:
+  // Eventos dos elementos da interface.
   timelineSlider.addEventListener("input", e => {
     const index = parseInt(e.target.value);
     if (!isNaN(index)) {
@@ -375,7 +356,8 @@ document.addEventListener("DOMContentLoaded", () => {
     showLayerAtIndex(newIndex);
   });
 
-  function togglePlay() {
+  playPauseBtn.addEventListener("click", () => {
+    if (geojsonLayers.length === 0) return;
     playing = !playing;
     if (playing) {
       playPauseBtn.textContent = "Pause";
@@ -384,11 +366,6 @@ document.addEventListener("DOMContentLoaded", () => {
       playPauseBtn.textContent = "Play";
       if (playInterval) clearInterval(playInterval);
     }
-  }
-
-  playPauseBtn.addEventListener("click", () => {
-    if (geojsonLayers.length === 0) return;
-    togglePlay();
   });
 
   speedInput.addEventListener("input", () => {
@@ -402,7 +379,7 @@ document.addEventListener("DOMContentLoaded", () => {
     radio.addEventListener("change", updateThresholdFilter);
   });
 
-  // Gera os controles para os campos e inicia a carga dos dados.
+  // Gera os controles de exibição e inicia o carregamento dos dados.
   generateFieldOptions();
   loadGeojsonLayers();
 });
